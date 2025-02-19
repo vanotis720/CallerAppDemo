@@ -1,11 +1,12 @@
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import colors from './src/styles/colors';
 
 export default function App() {
 	const [user, setUser] = useState(null);
-	const [loading, setLoading] = useState(false);
+	const [loading, setLoading] = useState(true);
 	const [email, setEmail] = useState('');
 	const [password, setPassword] = useState('');
 	const [error, setError] = useState(null);
@@ -17,8 +18,9 @@ export default function App() {
 
 	if (loading) {
 		return (
-			<View style={styles.container}>
-				<Text>Loading...</Text>
+			<View style={styles.loadingContainer}>
+				<ActivityIndicator color={colors.primary} size={'large'} />
+				<Text style={styles.loadingText}>Chargement en cours...</Text>
 				<StatusBar style="auto" />
 			</View>
 		);
@@ -82,6 +84,14 @@ const styles = StyleSheet.create({
 		backgroundColor: '#fff',
 		padding: 20,
 	},
+	loadingContainer: {
+		flex: 1,
+		justifyContent: 'center',
+		alignItems: 'center',
+	},
+	loadingText: {
+		color: '#666',
+	},
 	authContainer: {
 		flex: 1,
 		justifyContent: 'center',
@@ -103,7 +113,7 @@ const styles = StyleSheet.create({
 	input: {
 		height: 50,
 		width: '100%',
-		backgroundColor: '#F2F2F2',
+		backgroundColor: colors.gray,
 		marginTop: 20,
 		padding: 10,
 		borderRadius: 5,
@@ -121,7 +131,7 @@ const styles = StyleSheet.create({
 	button: {
 		height: 50,
 		width: '100%',
-		backgroundColor: '#6B57F1',
+		backgroundColor: colors.primary,
 		justifyContent: 'center',
 		alignItems: 'center',
 		borderRadius: 10,
