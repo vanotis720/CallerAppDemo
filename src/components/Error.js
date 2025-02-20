@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 const Error = ({ error }) => {
     return (
@@ -13,6 +13,7 @@ const styles = StyleSheet.create({
     container: {
         justifyContent: 'center',
         alignItems: 'center',
+        padding: 20,
     },
     error: {
         fontWeight: '600',

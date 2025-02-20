@@ -31,7 +31,7 @@ const TextMessageItem = ({ message, user }) => {
                 styles.messageDateContainer, { alignSelf: message.userId === user.id ? 'flex-end' : 'flex-start' },
             ]}>
                 <Text style={styles.messageDate}>
-                    {message.createdAt.toLocaleTimeString()}
+                    {message.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
                 {message.userId === user.id && (
                     <MaterialCommunityIcons

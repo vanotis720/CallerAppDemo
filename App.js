@@ -1,11 +1,14 @@
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Feather, MaterialCommunityIcons, Octicons } from '@expo/vector-icons';
 import colors from './src/styles/colors';
 import TextMessageItem from './src/components/TextMessageItem';
 import AudioMessageItem from './src/components/AudioMessageItem';
 import { Audio } from 'expo-av';
+import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from './firebaseConfig';
+import Error from './src/components/Error';
 
 const fakeConversation = {
 	id: 1,
@@ -46,8 +49,20 @@ const fakeConversation = {
 	]
 };
 
+
+const MessageItem = ({ message, user }) => {
+	switch (message.type) {
+		case 'text':
+			return <TextMessageItem message={message} user={user} />;
+		case 'audio':
+			return <AudioMessageItem message={message} user={user} />;
+		default:
+			return null;
+	}
+};
+
 export default function App() {
-	const [user, setUser] = useState({ name: 'Vander Otis', id: 1 });
+	const [user, setUser] = useState(null);
 	const [loading, setLoading] = useState(false);
 	const [email, setEmail] = useState('');
 	const [password, setPassword] = useState('');
@@ -56,21 +71,6 @@ export default function App() {
 
 	const [recording, setRecording] = useState();
 	const [permissionResponse, requestPermission] = Audio.usePermissions();
-
-	const handleLogin = async () => {
-		// 
-	}
-
-	const MessageItem = ({ message, user }) => {
-		switch (message.type) {
-			case 'text':
-				return <TextMessageItem message={message} user={user} />;
-			case 'audio':
-				return <AudioMessageItem message={message} user={user} />;
-			default:
-				return null;
-		}
-	};
 
 	async function startRecording() {
 		try {
@@ -105,6 +105,53 @@ export default function App() {
 		console.log('Recording stopped and stored at', uri);
 	}
 
+	const handleLogin = async () => {
+		setError(null);
+		let reg = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w\w+)+$/;
+
+		if (email === '' || password === '') {
+			setError('Veuillez remplir tous les champs');
+			return;
+		}
+
+		if (reg.test(email) === false) {
+			setError('Adresse email invalide');
+			return;
+		}
+
+		setLoading(true);
+		signInWithEmailAndPassword(auth, email, password)
+			.then((userCredential) => {
+				const user = userCredential.user;
+				setUser(user);
+			})
+			.catch((error) => {
+				const errorMessage = error.message;
+				setError(errorMessage);
+			})
+			.finally(() => {
+				setLoading(false);
+			});
+	}
+
+	const handleLogout = () => {
+		setUser(null);
+	}
+
+	useEffect(() => {
+		setLoading(true);
+		const unsubscribe = onAuthStateChanged(auth, (user) => {
+			if (user) {
+				setUser(user);
+			}
+			else {
+				setUser(null);
+			}
+			setLoading(false);
+		});
+
+		return () => unsubscribe();
+	}, []);
 
 	if (loading) {
 		return (
@@ -149,7 +196,7 @@ export default function App() {
 				</View>
 
 				<TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
-					<Text style={styles.buttonText}>Continuer</Text>
+					<Text style={styles.buttonText}>Se connecter</Text>
 				</TouchableOpacity>
 
 				{error ? <Error error={error} /> : null}
@@ -163,7 +210,7 @@ export default function App() {
 	return (
 		<View style={styles.container}>
 			<View style={styles.header}>
-				<TouchableOpacity>
+				<TouchableOpacity onPress={handleLogout}>
 					<MaterialCommunityIcons name="keyboard-backspace" size={24} color={colors.white} />
 				</TouchableOpacity>
 				<View style={styles.userInfo}>
