@@ -1,46 +1,51 @@
-import { StyleSheet, Text, Touchable, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, Touchable, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import colors from '../styles/colors';
 import { useEffect, useState } from 'react';
 import { Audio } from 'expo-av';
+import storage from '@react-native-firebase/storage';
 
 const AudioMessageItem = ({ message, user }) => {
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [sound, setSound] = useState(null);
 
-    useEffect(() => {
-        return () => {
-            if (sound) {
-                sound.unloadAsync();
-            }
-        };
-    }, [sound]);
-
-    async function onPlayPausePress() {
-        console.log('Loading Sound');
-        const { sound } = await Audio.Sound.createAsync(message.content);
-        setSound(sound);
-
-        console.log('Playing Sound');
-        setIsPlaying(true);
-        await sound.playAsync();
-    }
-
-    async function onPause() {
-        console.log('Pausing Sound');
-        setIsPlaying(false);
-        await sound.pauseAsync();
-    }
-
-    useEffect(() => {
+    const onPause = async () => {
         if (sound) {
-            sound.setOnPlaybackStatusUpdate((status) => {
+            await sound.pauseAsync();
+            setIsPlaying(false);
+        }
+    }
+
+    const onPlay = async () => {
+        if (sound) {
+            await sound.playAsync();
+            setIsPlaying(true);
+        } else {
+            setIsLoading(true);
+            const { sound: newSound } = await Audio.Sound.createAsync(
+                { uri: message.content },
+                { shouldPlay: true }
+            );
+            setSound(newSound);
+            setIsPlaying(true);
+            setIsLoading(false);
+
+            newSound.setOnPlaybackStatusUpdate((status) => {
                 if (status.didJustFinish) {
                     setIsPlaying(false);
-                    message.status = 'played';
+                    setSound(null);
                 }
             });
         }
+    }
+
+    useEffect(() => {
+        return sound
+            ? () => {
+                sound.unloadAsync();
+            }
+            : undefined;
     }, [sound]);
 
     return (
@@ -59,21 +64,20 @@ const AudioMessageItem = ({ message, user }) => {
                 ]}
             >
                 <TouchableOpacity
-                    onPress={isPlaying ? onPause : onPlayPausePress}
+                    onPress={isPlaying ? onPause : onPlay}
                     style={{ flexDirection: 'row', alignItems: 'center' }}
+                    disabled={isLoading}
                 >
-                    <MaterialIcons
-                        name={isPlaying ? 'pause' : 'play-arrow'}
-                        size={24}
-                        color={message.userId === user.uid ? colors.white : '#000'}
-                    />
+                    {isLoading ? (
+                        <ActivityIndicator size="small" color={message.userId === user.uid ? colors.white : '#000'} />
+                    ) : (
+                        <MaterialIcons
+                            name={isPlaying ? 'pause' : 'play-arrow'}
+                            size={24}
+                            color={message.userId === user.uid ? colors.white : '#000'}
+                        />
+                    )}
                     <View style={styles.waveform}>
-                        <View style={styles.waveformBar} />
-                        <View style={styles.waveformBar} />
-                        <View style={styles.waveformBar} />
-                        <View style={styles.waveformBar} />
-                        <View style={styles.waveformBar} />
-                        <View style={styles.waveformBar} />
                         <View style={styles.waveformBar} />
                         <View style={styles.waveformBar} />
                         <View style={styles.waveformBar} />
@@ -105,7 +109,6 @@ const AudioMessageItem = ({ message, user }) => {
 export default AudioMessageItem;
 
 const styles = StyleSheet.create({
-
     messageItem: {
         marginVertical: 10,
     },
@@ -127,7 +130,7 @@ const styles = StyleSheet.create({
     waveformBar: {
         width: 2,
         height: 20,
-        backgroundColor: '#000',
+        backgroundColor: '#fff',
         marginHorizontal: 1,
     },
     messageDateContainer: {
