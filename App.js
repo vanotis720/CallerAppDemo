@@ -6,49 +6,53 @@ import colors from './src/styles/colors';
 import TextMessageItem from './src/components/TextMessageItem';
 import AudioMessageItem from './src/components/AudioMessageItem';
 import { Audio } from 'expo-av';
-import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from './firebaseConfig';
 import Error from './src/components/Error';
 
-const fakeConversation = {
-	id: 1,
-	userId: 1,
-	messages: [
-		{
-			id: 1,
-			userId: 1,
-			content: 'Salut, comment vas-tu ?',
-			createdAt: new Date(),
-			status: 'sent',
-			type: 'text',
-		},
-		{
-			id: 2,
-			userId: 2,
-			content: 'Salut, je vais bien et toi ?',
-			createdAt: new Date(),
-			status: 'read',
-			type: 'text',
-		},
-		{
-			id: 3,
-			userId: 1,
-			content: 'Je vais bien aussi, merci.',
-			createdAt: new Date(),
-			status: 'read',
-			type: 'text',
-		},
-		{
-			id: 4,
-			userId: 2,
-			content: require('./assets/sample.wav'),
-			createdAt: new Date(),
-			status: 'read',
-			type: 'audio',
-		},
-	]
-};
+import { auth, db } from './firebaseConfig';
+import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
+import { onSnapshot, doc } from "firebase/firestore";
 
+const conversationDocRef = doc(db, 'Conversations', 'NZPRnpA0uXef7RHUZFRj');
+
+
+// const fakeConversation = {
+// 	id: 1,
+// 	userId: 1,
+// 	messages: [
+// 		{
+// 			id: 1,
+// 			userId: 1,
+// 			content: 'Salut, comment vas-tu ?',
+// 			createdAt: new Date(),
+// 			status: 'sent',
+// 			type: 'text',
+// 		},
+// 		{
+// 			id: 2,
+// 			userId: 2,
+// 			content: 'Salut, je vais bien et toi ?',
+// 			createdAt: new Date(),
+// 			status: 'read',
+// 			type: 'text',
+// 		},
+// 		{
+// 			id: 3,
+// 			userId: 1,
+// 			content: 'Je vais bien aussi, merci.',
+// 			createdAt: new Date(),
+// 			status: 'read',
+// 			type: 'text',
+// 		},
+// 		{
+// 			id: 4,
+// 			userId: 2,
+// 			content: require('./assets/sample.wav'),
+// 			createdAt: new Date(),
+// 			status: 'read',
+// 			type: 'audio',
+// 		},
+// 	]
+// };
 
 const MessageItem = ({ message, user }) => {
 	switch (message.type) {
@@ -68,6 +72,8 @@ export default function App() {
 	const [password, setPassword] = useState('');
 	const [error, setError] = useState(null);
 	const [passwordVisible, setPasswordVisible] = useState(false);
+
+	const [conversation, setConversation] = useState(null);
 
 	const [recording, setRecording] = useState();
 	const [permissionResponse, requestPermission] = Audio.usePermissions();
@@ -143,6 +149,9 @@ export default function App() {
 		const unsubscribe = onAuthStateChanged(auth, (user) => {
 			if (user) {
 				setUser(user);
+				console.log('====================================');
+				console.log(user.uid);
+				console.log('====================================');
 			}
 			else {
 				setUser(null);
@@ -152,6 +161,29 @@ export default function App() {
 
 		return () => unsubscribe();
 	}, []);
+
+	useEffect(() => {
+		if (user) {
+
+			const unsubscribe = onSnapshot(conversationDocRef, (docSnapshot) => {
+				if (docSnapshot.exists()) {
+					const userData = docSnapshot.data();
+					console.log('User data:', userData);
+					setConversation(userData);
+				} else {
+					setError('Nous n\'arrivons pas a recuperer la conversation');
+				}
+			});
+
+			return () => unsubscribe();
+		}
+	}, [user]);
+
+	useEffect(() => {
+		if (conversation) {
+			console.log(conversation);
+		}
+	}, [conversation]);
 
 	if (loading) {
 		return (
@@ -226,12 +258,12 @@ export default function App() {
 			</View>
 
 			<View style={styles.messagesContainer}>
-				<FlatList
-					data={fakeConversation.messages}
-					keyExtractor={item => item.id.toString()}
+				{conversation ? <FlatList
+					data={conversation.messages}
+					keyExtractor={item => item.createdAt.toString()}
 					renderItem={({ item }) => <MessageItem message={item} user={user} />}
 					contentContainerStyle={{ padding: 20 }}
-				/>
+				/> : null}
 
 				<View style={styles.inputContainer}>
 					<TextInput

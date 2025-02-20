@@ -47,14 +47,14 @@ const AudioMessageItem = ({ message, user }) => {
         <View style={[
             styles.messageItem,
             {
-                alignSelf: message.userId === user.id ? 'flex-end' : 'flex-start',
+                alignSelf: message.userId === user.uid ? 'flex-end' : 'flex-start',
             },
         ]}>
             <View
                 style={[
                     styles.message,
                     {
-                        backgroundColor: message.userId === user.id ? colors.primary : colors.gray,
+                        backgroundColor: message.userId === user.uid ? colors.primary : colors.gray,
                     },
                 ]}
             >
@@ -65,7 +65,7 @@ const AudioMessageItem = ({ message, user }) => {
                     <MaterialIcons
                         name={isPlaying ? 'pause' : 'play-arrow'}
                         size={24}
-                        color={message.userId === user.id ? colors.white : '#000'}
+                        color={message.userId === user.uid ? colors.white : '#000'}
                     />
                     <View style={styles.waveform}>
                         <View style={styles.waveformBar} />
@@ -84,12 +84,12 @@ const AudioMessageItem = ({ message, user }) => {
                 </TouchableOpacity>
             </View>
             <View style={[
-                styles.messageDateContainer, { alignSelf: message.userId === user.id ? 'flex-end' : 'flex-start' },
+                styles.messageDateContainer, { alignSelf: message.userId === user.uid ? 'flex-end' : 'flex-start' },
             ]}>
                 <Text style={styles.messageDate}>
-                    {message.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(message.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
-                {message.userId === user.id && (
+                {message.userId === user.uid && (
                     <MaterialCommunityIcons
                         name={message.status === 'read' ? 'check-all' : 'check'}
                         size={16}
