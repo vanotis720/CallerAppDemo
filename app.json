@@ -40,6 +40,14 @@
         {
           "microphonePermission": "Autorisez $(PRODUCT_NAME) à accéder à votre microphone."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
       ]
     ]
   }

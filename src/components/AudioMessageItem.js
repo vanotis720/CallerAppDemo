@@ -3,7 +3,6 @@ import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import colors from '../styles/colors';
 import { useEffect, useState } from 'react';
 import { Audio } from 'expo-av';
-import storage from '@react-native-firebase/storage';
 
 const AudioMessageItem = ({ message, user }) => {
     const [isPlaying, setIsPlaying] = useState(false);
