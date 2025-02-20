@@ -10,10 +10,9 @@ import Error from './src/components/Error';
 
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
-import { onSnapshot, doc } from "firebase/firestore";
+import { onSnapshot, doc, Timestamp, arrayUnion, updateDoc } from "firebase/firestore";
 
 const conversationDocRef = doc(db, 'Conversations', 'NZPRnpA0uXef7RHUZFRj');
-
 
 // const fakeConversation = {
 // 	id: 1,
@@ -74,6 +73,8 @@ export default function App() {
 	const [passwordVisible, setPasswordVisible] = useState(false);
 
 	const [conversation, setConversation] = useState(null);
+	const [textMessage, setTextMessage] = useState('');
+	const [sending, setSending] = useState(false);
 
 	const [recording, setRecording] = useState();
 	const [permissionResponse, requestPermission] = Audio.usePermissions();
@@ -144,14 +145,37 @@ export default function App() {
 		setUser(null);
 	}
 
+	const handleSendMessage = async () => {
+		if (textMessage.trim().length === 0) {
+			return;
+		}
+
+		const newMessage = {
+			id: Date.now(),
+			userId: user.uid,
+			content: textMessage,
+			createdAt: Timestamp.now(),
+			status: 'sent',
+			type: 'text',
+		};
+
+		setSending(true);
+		console.log('====================================');
+		console.log('started');
+		console.log('====================================');
+		await updateDoc(conversationDocRef, {
+			messages: arrayUnion(newMessage)
+		});
+
+		setTextMessage('');
+		setSending(false);
+	}
+
 	useEffect(() => {
 		setLoading(true);
 		const unsubscribe = onAuthStateChanged(auth, (user) => {
 			if (user) {
 				setUser(user);
-				console.log('====================================');
-				console.log(user.uid);
-				console.log('====================================');
 			}
 			else {
 				setUser(null);
@@ -168,7 +192,6 @@ export default function App() {
 			const unsubscribe = onSnapshot(conversationDocRef, (docSnapshot) => {
 				if (docSnapshot.exists()) {
 					const userData = docSnapshot.data();
-					console.log('User data:', userData);
 					setConversation(userData);
 				} else {
 					setError('Nous n\'arrivons pas a recuperer la conversation');
@@ -178,12 +201,6 @@ export default function App() {
 			return () => unsubscribe();
 		}
 	}, [user]);
-
-	useEffect(() => {
-		if (conversation) {
-			console.log(conversation);
-		}
-	}, [conversation]);
 
 	if (loading) {
 		return (
@@ -269,16 +286,31 @@ export default function App() {
 					<TextInput
 						style={styles.messageInput}
 						placeholder="Tapez votre message..."
+						value={textMessage}
+						onChangeText={setTextMessage}
+						multiline={true}
 					/>
-					<TouchableOpacity style={styles.sendButton}
-						onPress={recording ? stopRecording : startRecording}
-					>
-						<MaterialCommunityIcons name={recording ? 'stop' : 'microphone'} size={30} color={colors.white} />
-					</TouchableOpacity>
+					{
+						textMessage.length ? (
+							<TouchableOpacity style={styles.sendButton}
+								onPress={handleSendMessage}
+							>
+								{
+									sending ? <ActivityIndicator color={colors.white} /> : <MaterialCommunityIcons name={'send'} size={30} color={colors.white} />
+								}
+							</TouchableOpacity>
+						) : (
+							<TouchableOpacity style={styles.sendButton}
+								onPress={recording ? stopRecording : startRecording}
+							>
+								<MaterialCommunityIcons name={recording ? 'stop' : 'microphone'} size={30} color={colors.white} />
+							</TouchableOpacity>
+						)
+					}
 				</View>
 			</View>
 			<StatusBar style="auto" />
-		</View>
+		</View >
 	);
 }
 
