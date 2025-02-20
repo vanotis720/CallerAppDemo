@@ -1,57 +1,19 @@
+globalThis.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true;
+
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { Feather, MaterialCommunityIcons, Octicons } from '@expo/vector-icons';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons, Octicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
+
 import colors from './src/styles/colors';
 import TextMessageItem from './src/components/TextMessageItem';
 import AudioMessageItem from './src/components/AudioMessageItem';
-import { Audio } from 'expo-av';
 import Error from './src/components/Error';
-
-import { auth, db } from './firebaseConfig';
-import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth';
-import { onSnapshot, doc, Timestamp, arrayUnion, updateDoc } from "firebase/firestore";
-
-const conversationDocRef = doc(db, 'Conversations', 'NZPRnpA0uXef7RHUZFRj');
-
-// const fakeConversation = {
-// 	id: 1,
-// 	userId: 1,
-// 	messages: [
-// 		{
-// 			id: 1,
-// 			userId: 1,
-// 			content: 'Salut, comment vas-tu ?',
-// 			createdAt: new Date(),
-// 			status: 'sent',
-// 			type: 'text',
-// 		},
-// 		{
-// 			id: 2,
-// 			userId: 2,
-// 			content: 'Salut, je vais bien et toi ?',
-// 			createdAt: new Date(),
-// 			status: 'read',
-// 			type: 'text',
-// 		},
-// 		{
-// 			id: 3,
-// 			userId: 1,
-// 			content: 'Je vais bien aussi, merci.',
-// 			createdAt: new Date(),
-// 			status: 'read',
-// 			type: 'text',
-// 		},
-// 		{
-// 			id: 4,
-// 			userId: 2,
-// 			content: require('./assets/sample.wav'),
-// 			createdAt: new Date(),
-// 			status: 'read',
-// 			type: 'audio',
-// 		},
-// 	]
-// };
 
 const MessageItem = ({ message, user }) => {
 	switch (message.type) {
@@ -64,53 +26,28 @@ const MessageItem = ({ message, user }) => {
 	}
 };
 
+const conversationId = '00ikWIu59slPWL7Ys41o';
+
 export default function App() {
-	const [user, setUser] = useState(null);
 	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState(null);
+
+	// authentification state
+	const [user, setUser] = useState(null);
 	const [email, setEmail] = useState('');
 	const [password, setPassword] = useState('');
-	const [error, setError] = useState(null);
 	const [passwordVisible, setPasswordVisible] = useState(false);
 
+	// text message state
+	const flatListRef = useRef(null);
 	const [conversation, setConversation] = useState(null);
 	const [textMessage, setTextMessage] = useState('');
 	const [sending, setSending] = useState(false);
 
-	const [recording, setRecording] = useState();
-	const [permissionResponse, requestPermission] = Audio.usePermissions();
-
-	async function startRecording() {
-		try {
-			if (permissionResponse.status !== 'granted') {
-				console.log('Requesting permission..');
-				await requestPermission();
-			}
-			await Audio.setAudioModeAsync({
-				allowsRecordingIOS: true,
-				playsInSilentModeIOS: true,
-			});
-
-			console.log('Starting recording..');
-			const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-			setRecording(recording);
-			console.log('Recording started');
-		} catch (err) {
-			console.error('Failed to start recording', err);
-		}
-	}
-
-	async function stopRecording() {
-		console.log('Stopping recording..');
-		setRecording(undefined);
-		await recording.stopAndUnloadAsync();
-		await Audio.setAudioModeAsync(
-			{
-				allowsRecordingIOS: false,
-			}
-		);
-		const uri = recording.getURI();
-		console.log('Recording stopped and stored at', uri);
-	}
+	// audio messaging state
+	const [isRecord, setIsRecord] = useState(false);
+	const [recording, setRecording] = useState(null);
+	const [audioMessage, setAudioMessage] = useState(null);
 
 	const handleLogin = async () => {
 		setError(null);
@@ -127,14 +64,18 @@ export default function App() {
 		}
 
 		setLoading(true);
-		signInWithEmailAndPassword(auth, email, password)
-			.then((userCredential) => {
-				const user = userCredential.user;
+		auth()
+			.signInWithEmailAndPassword(email, password)
+			.then(() => {
 				setUser(user);
 			})
-			.catch((error) => {
-				const errorMessage = error.message;
-				setError(errorMessage);
+			.catch(error => {
+				if (error.code === 'auth/invalid-email') {
+					setError('That email address is invalid!');
+				}
+				else {
+					setError('Nous n\'avons pas pu vous connecter, veuillez verifier vos identifiants');
+				}
 			})
 			.finally(() => {
 				setLoading(false);
@@ -142,65 +83,152 @@ export default function App() {
 	}
 
 	const handleLogout = () => {
-		setUser(null);
+		auth().signOut();
 	}
 
-	const handleSendMessage = async () => {
-		if (textMessage.trim().length === 0) {
+	const startRecording = async () => {
+		try {
+			setIsRecord(true);
+			await Audio.requestPermissionsAsync();
+			await Audio.setAudioModeAsync({
+				allowsRecordingIOS: true,
+				playsInSilentModeIOS: true,
+			});
+			const { recording } = await Audio.Recording.createAsync(
+				Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY
+			);
+			setRecording(recording);
+		} catch (err) {
+			setIsRecord(false);
+			console.error('Failed to start recording', err);
+		}
+	};
+
+	const stopRecording = async () => {
+		setRecording(undefined);
+		setSending(true);
+		await recording.stopAndUnloadAsync();
+		const uri = recording.getURI();
+		setAudioMessage(uri);
+		setIsRecord(false);
+		const downloadURL = await uploadAudio(uri);
+		if (downloadURL) {
+			handleSendMessage(downloadURL);
+		}
+		else {
+			setSending(false);
+		}
+	};
+
+	const uploadAudio = async (uri) => {
+		setSending(true);
+		try {
+			const blob = await new Promise((resolve, reject) => {
+				fetch(uri)
+					.then(response => response.blob())
+					.then(blob => resolve(blob))
+					.catch(error => {
+						console.log('Error reading file:', error);
+						reject(error);
+					});
+			});
+
+			if (blob != null) {
+				const uriParts = uri.split(".");
+				const fileType = uriParts[uriParts.length - 1];
+
+				const storageRef = storage().ref(`audio/${Date.now()}.${fileType}`);
+				await storageRef.put(blob);
+				const downloadURL = await storageRef.getDownloadURL();
+
+				return downloadURL;
+			}
+		} catch (error) {
+			console.log("Error:", error);
+		}
+		setSending(false);
+		return null;
+	};
+
+	const handleSendMessage = async (audioURL = null) => {
+		if (textMessage.trim().length === 0 && !audioURL) {
 			return;
 		}
 
-		const newMessage = {
+		let newMessage = {
 			id: Date.now(),
 			userId: user.uid,
-			content: textMessage,
-			createdAt: Timestamp.now(),
+			createdAt: firestore.Timestamp.now(),
 			status: 'sent',
 			type: 'text',
+			content: textMessage,
 		};
 
+		if (audioURL) {
+			newMessage = {
+				...newMessage,
+				type: 'audio',
+				content: audioURL,
+			};
+			setAudioMessage(null);
+		}
+
 		setSending(true);
-		console.log('====================================');
-		console.log('started');
-		console.log('====================================');
-		await updateDoc(conversationDocRef, {
-			messages: arrayUnion(newMessage)
-		});
+
+		try {
+			const conversationDocRef = firestore().collection('Conversations').doc(conversationId);
+			await conversationDocRef.update({
+				messages: firestore.FieldValue.arrayUnion(newMessage)
+			});
+		} catch (error) {
+			console.error('Failed to send message', error);
+			setError('Nous n\'avons pas pu envoyer votre message');
+		}
 
 		setTextMessage('');
 		setSending(false);
-	}
+	};
 
+	// listening auth state 
 	useEffect(() => {
-		setLoading(true);
-		const unsubscribe = onAuthStateChanged(auth, (user) => {
+		const subscriber = auth().onAuthStateChanged((user) => {
 			if (user) {
 				setUser(user);
 			}
 			else {
 				setUser(null);
 			}
-			setLoading(false);
+			if (loading) setLoading(false);
 		});
-
-		return () => unsubscribe();
+		return subscriber;
 	}, []);
 
+	// listening conversations changes
 	useEffect(() => {
 		if (user) {
+			const subscriber = firestore()
+				.collection('Conversations')
+				.doc(conversationId)
+				.onSnapshot(documentSnapshot => {
+					const data = documentSnapshot.data();
+					setConversation(data);
+				}, error => {
+					console.error("Error fetching conversation: ", error);
+				});
 
-			const unsubscribe = onSnapshot(conversationDocRef, (docSnapshot) => {
-				if (docSnapshot.exists()) {
-					const userData = docSnapshot.data();
-					setConversation(userData);
-				} else {
-					setError('Nous n\'arrivons pas a recuperer la conversation');
-				}
-			});
-
-			return () => unsubscribe();
+			return () => subscriber();
 		}
 	}, [user]);
+
+	// scroll to bottom on conversations changes
+	useEffect(() => {
+		if (conversation && flatListRef.current) {
+			flatListRef.current.scrollToEnd({ animated: true });
+		}
+	}, [conversation]);
+
+
+
 
 	if (loading) {
 		return (
@@ -257,60 +285,66 @@ export default function App() {
 	}
 
 	return (
-		<View style={styles.container}>
-			<View style={styles.header}>
-				<TouchableOpacity onPress={handleLogout}>
-					<MaterialCommunityIcons name="keyboard-backspace" size={24} color={colors.white} />
-				</TouchableOpacity>
-				<View style={styles.userInfo}>
-					<Text style={styles.userName}>Jean-Marie</Text>
-					<View style={styles.userStatusSection}>
-						<Octicons name="dot-fill" size={24} color="green" />
-						<Text style={styles.userStatus}>En ligne</Text>
+		<SafeAreaProvider>
+			<SafeAreaView style={{ flex: 1 }}>
+				<View style={styles.container}>
+					<View style={styles.header}>
+						<TouchableOpacity onPress={handleLogout}>
+							<MaterialCommunityIcons name="keyboard-backspace" size={24} color={colors.white} />
+						</TouchableOpacity>
+						<View style={styles.userInfo}>
+							<Text style={styles.userName}>Jean-Marie</Text>
+							<View style={styles.userStatusSection}>
+								<Octicons name="dot-fill" size={24} color="green" />
+								<Text style={styles.userStatus}>En ligne</Text>
+							</View>
+						</View>
+						<TouchableOpacity>
+							<MaterialCommunityIcons name="phone" size={24} color={colors.white} />
+						</TouchableOpacity>
+					</View>
+
+					<View style={styles.messagesContainer}>
+						{conversation ? <FlatList
+							ref={flatListRef}
+							data={conversation.messages}
+							keyExtractor={item => item.createdAt.toString()}
+							renderItem={({ item }) => <MessageItem message={item} user={user} />}
+							contentContainerStyle={{ padding: 20 }}
+							style={{ marginBottom: 80 }}
+						/> : null}
+
+						<View style={styles.inputContainer}>
+							<TextInput
+								style={styles.messageInput}
+								placeholder="Tapez votre message..."
+								value={textMessage}
+								onChangeText={setTextMessage}
+								onEndEditing={() => handleSendMessage()}
+							/>
+							{
+								textMessage.length ? (
+									<TouchableOpacity style={styles.sendButton}
+										onPress={() => handleSendMessage()}
+									>
+										{
+											sending ? <ActivityIndicator color={colors.white} /> : <MaterialCommunityIcons name={'send'} size={30} color={colors.white} />
+										}
+									</TouchableOpacity>
+								) : (
+									<TouchableOpacity style={styles.sendButton}
+										onPress={isRecord ? stopRecording : startRecording}
+									>
+										<MaterialCommunityIcons name={isRecord ? 'stop' : 'microphone'} size={30} color={colors.white} />
+									</TouchableOpacity>
+								)
+							}
+						</View>
 					</View>
 				</View>
-				<TouchableOpacity>
-					<MaterialCommunityIcons name="phone" size={24} color={colors.white} />
-				</TouchableOpacity>
-			</View>
-
-			<View style={styles.messagesContainer}>
-				{conversation ? <FlatList
-					data={conversation.messages}
-					keyExtractor={item => item.createdAt.toString()}
-					renderItem={({ item }) => <MessageItem message={item} user={user} />}
-					contentContainerStyle={{ padding: 20 }}
-				/> : null}
-
-				<View style={styles.inputContainer}>
-					<TextInput
-						style={styles.messageInput}
-						placeholder="Tapez votre message..."
-						value={textMessage}
-						onChangeText={setTextMessage}
-						multiline={true}
-					/>
-					{
-						textMessage.length ? (
-							<TouchableOpacity style={styles.sendButton}
-								onPress={handleSendMessage}
-							>
-								{
-									sending ? <ActivityIndicator color={colors.white} /> : <MaterialCommunityIcons name={'send'} size={30} color={colors.white} />
-								}
-							</TouchableOpacity>
-						) : (
-							<TouchableOpacity style={styles.sendButton}
-								onPress={recording ? stopRecording : startRecording}
-							>
-								<MaterialCommunityIcons name={recording ? 'stop' : 'microphone'} size={30} color={colors.white} />
-							</TouchableOpacity>
-						)
-					}
-				</View>
-			</View>
+			</SafeAreaView>
 			<StatusBar style="auto" />
-		</View >
+		</SafeAreaProvider>
 	);
 }
 
