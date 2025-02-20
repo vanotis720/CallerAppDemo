@@ -1,20 +1,110 @@
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Feather, MaterialCommunityIcons, Octicons } from '@expo/vector-icons';
 import colors from './src/styles/colors';
+import TextMessageItem from './src/components/TextMessageItem';
+import AudioMessageItem from './src/components/AudioMessageItem';
+import { Audio } from 'expo-av';
+
+const fakeConversation = {
+	id: 1,
+	userId: 1,
+	messages: [
+		{
+			id: 1,
+			userId: 1,
+			content: 'Salut, comment vas-tu ?',
+			createdAt: new Date(),
+			status: 'sent',
+			type: 'text',
+		},
+		{
+			id: 2,
+			userId: 2,
+			content: 'Salut, je vais bien et toi ?',
+			createdAt: new Date(),
+			status: 'read',
+			type: 'text',
+		},
+		{
+			id: 3,
+			userId: 1,
+			content: 'Je vais bien aussi, merci.',
+			createdAt: new Date(),
+			status: 'read',
+			type: 'text',
+		},
+		{
+			id: 4,
+			userId: 2,
+			content: require('./assets/sample.wav'),
+			createdAt: new Date(),
+			status: 'read',
+			type: 'audio',
+		},
+	]
+};
 
 export default function App() {
-	const [user, setUser] = useState({ name: 'Vander Otis' });
+	const [user, setUser] = useState({ name: 'Vander Otis', id: 1 });
 	const [loading, setLoading] = useState(false);
 	const [email, setEmail] = useState('');
 	const [password, setPassword] = useState('');
 	const [error, setError] = useState(null);
 	const [passwordVisible, setPasswordVisible] = useState(false);
 
+	const [recording, setRecording] = useState();
+	const [permissionResponse, requestPermission] = Audio.usePermissions();
+
 	const handleLogin = async () => {
 		// 
 	}
+
+	const MessageItem = ({ message, user }) => {
+		switch (message.type) {
+			case 'text':
+				return <TextMessageItem message={message} user={user} />;
+			case 'audio':
+				return <AudioMessageItem message={message} user={user} />;
+			default:
+				return null;
+		}
+	};
+
+	async function startRecording() {
+		try {
+			if (permissionResponse.status !== 'granted') {
+				console.log('Requesting permission..');
+				await requestPermission();
+			}
+			await Audio.setAudioModeAsync({
+				allowsRecordingIOS: true,
+				playsInSilentModeIOS: true,
+			});
+
+			console.log('Starting recording..');
+			const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+			setRecording(recording);
+			console.log('Recording started');
+		} catch (err) {
+			console.error('Failed to start recording', err);
+		}
+	}
+
+	async function stopRecording() {
+		console.log('Stopping recording..');
+		setRecording(undefined);
+		await recording.stopAndUnloadAsync();
+		await Audio.setAudioModeAsync(
+			{
+				allowsRecordingIOS: false,
+			}
+		);
+		const uri = recording.getURI();
+		console.log('Recording stopped and stored at', uri);
+	}
+
 
 	if (loading) {
 		return (
@@ -89,14 +179,22 @@ export default function App() {
 			</View>
 
 			<View style={styles.messagesContainer}>
+				<FlatList
+					data={fakeConversation.messages}
+					keyExtractor={item => item.id.toString()}
+					renderItem={({ item }) => <MessageItem message={item} user={user} />}
+					contentContainerStyle={{ padding: 20 }}
+				/>
 
 				<View style={styles.inputContainer}>
 					<TextInput
 						style={styles.messageInput}
 						placeholder="Tapez votre message..."
 					/>
-					<TouchableOpacity style={styles.sendButton}>
-						<Feather name="mic" size={25} color={colors.white} />
+					<TouchableOpacity style={styles.sendButton}
+						onPress={recording ? stopRecording : startRecording}
+					>
+						<MaterialCommunityIcons name={recording ? 'stop' : 'microphone'} size={30} color={colors.white} />
 					</TouchableOpacity>
 				</View>
 			</View>
@@ -204,7 +302,7 @@ const styles = StyleSheet.create({
 		position: 'absolute',
 		bottom: 5,
 		width: '100%',
-		paddingHorizontal: 20,
+		paddingHorizontal: 10,
 		flexDirection: 'row',
 		justifyContent: 'space-between',
 		alignItems: 'center',
@@ -223,5 +321,5 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		borderRadius: 50,
 		height: 50,
-	}
+	},
 });
